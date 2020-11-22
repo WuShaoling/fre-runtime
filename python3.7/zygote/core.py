@@ -36,42 +36,7 @@ def exec_function(param):
     sys.exit(0)
 
 
-# def do_exec(param):
-#     param["afterForkTime"] = time.time_ns()
-#
-#     # 加载函数包
-#     sys.path.append(param["codePath"])
-#     # chroot以后这些包会找不到，需要特殊处理
-#     package_path = ['/usr/local/lib/python37.zip', '/usr/local/lib/python3.7',
-#                     '/usr/local/lib/python3.7/lib-dynload', '/usr/local/lib/python3.7/site-packages']
-#     for p in package_path:
-#         sys.path.append(p)
-#
-#     result = {
-#         "id": param["id"],
-#     }
-#     try:
-#         handler = importlib.import_module(param["handler"])
-#         result["result"] = handler.handler(param["event"])
-#     except Exception as e:
-#         traceback.format_exc()
-#         result["error"] = e
-#
-#     param["afterHandlerTime"] = time.time_ns()
-#
-#     # TODO 结果写回 server
-#     print("firstFork=" + str((param["afterFirstForkTime"] - param["startTime"]) / 1e6) + ", " +
-#           "unshare=" + str((param["afterUnshareTime"] - param["afterFirstForkTime"]) / 1e6) + ", " +
-#           "chroot=" + str((param["afterChrootTime"] - param["afterUnshareTime"]) / 1e6) + ", " +
-#           "fork=" + str((param["afterForkTime"] - param["afterChrootTime"]) / 1e6) + ", " +
-#           "handler=" + str((param["afterHandlerTime"] - param["afterForkTime"]) / 1e6) + ", " +
-#           "total=" + str((param["afterHandlerTime"] - param["afterFirstForkTime"]) / 1e6)
-#           )
-#
-#     sys.exit(0)
-
-
-def new_container(exec_ctx):
+def init_container(exec_ctx):
     try:
         # unshare
         res = syscall.unshare()
@@ -94,7 +59,7 @@ def new_container(exec_ctx):
         # 记录容器进程启动时的时间
         process_start_time = int(round(time.time() * 1000000))
 
-        # fork
+        # 创建容器进程
         pid = os.fork()
         if pid == 0:  # child, 正式进入容器环境中
             exec_function(exec_ctx)
@@ -116,15 +81,45 @@ def new_container(exec_ctx):
 
 # 开始监听指令
 def start_fork_server(sock):
+    header_len = 2
+    msg_len = 0
+    recv_data = "".encode("utf-8")
     while True:
-        data = sock.recv(1024)
-        print(str(data))
-        exec_ctx = json.loads(data)
-        print(exec_ctx)
-        ppid = os.fork()
-        if ppid == 0:  # 子进程
-            sock.close()
-            new_container(exec_ctx)
+        data = sock.recv(64)
+        recv_data += data
+
+        # 未获取到消息长度，先获取长度
+        if msg_len == 0:
+            if len(recv_data) < header_len:  # 接收的不足2个字节，不足以获取消息的长度，继续接收
+                continue
+            else:  # 接收的消息足够获取消息的长度
+                msg_len = int.from_bytes(recv_data[:header_len], byteorder='little', signed=True)  # 获取消息长度
+                recv_data = recv_data[header_len:]  # 去掉消息长度头部
+
+        # 现在确定已经拿到消息的长度了
+
+        # 当前收到的数据小于期望的数据长度，继续接收
+        if len(recv_data) < msg_len:
+            continue
+
+        # 当前收到的数据大于等于期望的数据长度，开始解析
+        while len(recv_data) >= msg_len:
+            message = recv_data[:msg_len]  # 拿到的消息
+            recv_data = recv_data[msg_len:]  # 去掉已经接收的数据
+
+            # 拿到数据以后，开始创建容器父进程
+            exec_ctx = json.loads(message)
+            ppid = os.fork()
+            if ppid == 0:  # 子进程，即容器进程的父进程
+                sock.close()
+                init_container(exec_ctx)
+
+            # 继续解析
+            if len(recv_data) < header_len:
+                msg_len = 0
+                break
+            msg_len = int.from_bytes(recv_data[:header_len], byteorder='little', signed=True)
+            recv_data = recv_data[header_len:]
 
 
 # 连接到 server 并注册自身
