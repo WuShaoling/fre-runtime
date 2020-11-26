@@ -85,7 +85,7 @@ def start_fork_server(sock):
     msg_len = 0
     recv_data = "".encode("utf-8")
     while True:
-        data = sock.recv(64)
+        data = sock.recv(1024)
         recv_data += data
 
         # 未获取到消息长度，先获取长度
