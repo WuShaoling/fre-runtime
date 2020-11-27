@@ -1,4 +1,3 @@
-import http.client
 import importlib
 import json
 import os
@@ -27,16 +26,24 @@ def exec_function(param):
         result["error"] = str(e)
     result["functionEndTimestamp"] = int(round(time.time() * 1000000))
 
-    # 上报结果
-    conn = http.client.HTTPConnection("127.0.0.1:" + param["servePort"])
-    conn.request("PUT", "/inner/function/end", json.dumps(result, default=lambda obj: obj.__dict__),
-                 {'content-type': "application/json"})
+    # # 上报结果
+    # conn = http.client.HTTPConnection("127.0.0.1:" + param["servePort"])
+    # conn.request("PUT", "/inner/function/end", json.dumps(result, default=lambda obj: obj.__dict__),
+    #              {'content-type': "application/json"})
+
+    print(param["id"], ",",
+          result["containerProcessRunAt"] - param["containerCreateAt"], ",",
+          result["functionRunTimestamp"] - result["containerProcessRunAt"], ",",
+          result["functionRunTimestamp"] - param["containerCreateAt"])
 
     # 主动退出
     sys.exit(0)
 
 
 def init_container(exec_ctx):
+    t = exec_ctx["containerCreateAt"]
+    exec_ctx["containerCreateAt"] = int(round(time.time() * 1000000))
+    print("--> ", t, exec_ctx["containerCreateAt"])
     try:
         # unshare
         res = syscall.unshare()
@@ -65,16 +72,16 @@ def init_container(exec_ctx):
             exec_function(exec_ctx)
         else:  # parent
             # 上报容器进程启动
-            conn = http.client.HTTPConnection("127.0.0.1:" + exec_ctx["servePort"])
-            conn.request("PUT", "/inner/process/run/" + exec_ctx["id"] + "/" + str(process_start_time) + "/" + str(pid))
+            # conn = http.client.HTTPConnection("127.0.0.1:" + exec_ctx["servePort"])
+            # conn.request("PUT", "/inner/process/run/" + exec_ctx["id"] + "/" + str(process_start_time) + "/" + str(pid))
             os.waitpid(pid, 0)
     except Exception as e:
         traceback.format_exc()
         print(e)
 
     # 上报容器进程退出, (wait返沪结果或者异常时)
-    conn = http.client.HTTPConnection("127.0.0.1:" + exec_ctx["servePort"])
-    conn.request("PUT", "/inner/process/end/" + exec_ctx["id"] + "/" + str(int(round(time.time() * 1000000))))
+    # conn = http.client.HTTPConnection("127.0.0.1:" + exec_ctx["servePort"])
+    # conn.request("PUT", "/inner/process/end/" + exec_ctx["id"] + "/" + str(int(round(time.time() * 1000000))))
 
     sys.exit(0)  # 主动退出
 

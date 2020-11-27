@@ -24,7 +24,7 @@ EOF
 
 # 构建 pause
 docker run -it -v $PWD:/go/src golang:1.14 bash -c "cd /go/src && go build -o pause pause.go"
-cp pause ${name}/bin/
+mv pause ${name}/bin/
 
 # 拷贝 rootfs 到 workspace
 if [ ! -d "${workspace}/runtime" ]; then

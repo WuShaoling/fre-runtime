@@ -1,4 +1,3 @@
-import http.client
 import importlib
 import json
 import sys
@@ -24,9 +23,10 @@ def exec_function(param):
     result["functionEndTimestamp"] = int(round(time.time() * 1000000))
 
     # 上报结果
-    conn = http.client.HTTPConnection("127.0.0.1:" + param["servePort"])
-    conn.request("PUT", "/inner/function/end", json.dumps(result, default=lambda obj: obj.__dict__),
-                 {'content-type': "application/json"})
+    print(param["id"], ",",
+          result["containerProcessRunAt"] - param["containerCreateAt"], ",",
+          result["functionRunTimestamp"] - result["containerProcessRunAt"], ",",
+          result["functionRunTimestamp"] - param["containerCreateAt"])
 
     # 主动退出
     sys.exit(0)
