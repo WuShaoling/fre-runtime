@@ -2,9 +2,9 @@ import time
 
 
 def handler(event):
-    result = 0
+    result = ""
     for key in event:
-        result += event[key]
+        result += event[key] + " "
     return {
         "timestamp": int(round(time.time() * 1000000)),
         "data": result
